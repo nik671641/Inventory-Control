@@ -390,12 +390,12 @@ async def send_user_tools(message: types.Message):
     # print('user_id-------->',user_id)
     # print('message-------->',message)
     # Получение данных из базы данных
-    tools = await fetch_user_tools(user_id)
+    user_tool = await fetch_user_tools(user_id)
 
     # print('tools-------->',tools)
 
     # Если нет инструментов для пользователя
-    if not tools:
+    if not user_tool:
         reply = await message.answer("У вас нет зарегистрированных инструментов.")
         await handle_user_message(message)
         await handle_bot_message(message, reply)
@@ -403,13 +403,13 @@ async def send_user_tools(message: types.Message):
 
     # Создание инлайн-кнопок
     keyboard_buttons = []
-    for tool in tools:
+    for tool in user_tool:
         # print('tool---------', tool)
-
+        print('tool[uuid]------------------------------------------------------------------------------------',tool['uuid'])
         if user_id == tool['chat_id']:
             keyboard_buttons.append(
                 [InlineKeyboardButton(text=tool['Инструменты'],
-                                      callback_data=f"tool2:{tool['Инструменты']}:{tool['Количество']}")])
+                                      callback_data=f"ret_tool:{tool['uuid']}")])
 
     # Проверяем, если список кнопок пуст
     if not keyboard_buttons:
@@ -436,59 +436,78 @@ async def send_user_tools(message: types.Message):
 
 
 # Обработчик для выбора инструмента, который хочет вернуть
-@router.callback_query(F.data.startswith('tool2:'))
+@router.callback_query(F.data.startswith('ret_tool:'))
 async def process_tool_return(callback_query: types.CallbackQuery):
-    logging.info(f"Callback query received: {callback_query.data}")
+    # Получаем callback_data
+    callback_data = callback_query.data
+    print('callback_data--------->', callback_data)
 
-    _, tool_name,tool_quantity = callback_query.data.split(":")
-    # print("---------process_tool_return---------")
-    # print("tool_name---------\n", tool_name)
-    await show_return_quantity_selection(callback_query.message, tool_name, tool_quantity)
+    # Извлекаем uuid инструмента из callback_data
+    tool_uuid = callback_data.split(':')[1]
+    print('tool_uuid--------->', tool_uuid)
+
+    # Теперь вы можете использовать tool_uuid для выполнения нужных действий.
+    # Например, получить данные инструмента из базы данных по uuid.
+    user_tool = await fetch_tool_by_uuid(tool_uuid)
+    print(user_tool)
+
+    if user_tool:
+        tool_name = user_tool['Инструменты']
+        tool_quantity = user_tool['Количество']
+
+        print("---------process_tool_return---------")
+        print("tool_name---------", tool_name)
+        await show_return_quantity_selection(callback_query.message, tool_uuid, tool_quantity)
+
+    # Оповещаем пользователя, что запрос обработан
+    await callback_query.answer()
 
 
 # Функция для отображения количества инструмента и кнопок увеличения/уменьшения для возврата
-async def show_return_quantity_selection(message: types.Message, tool_name: str, tool_quantity, current_quantity: int = 1):
+async def show_return_quantity_selection(message: types.Message, tool_uuid: str, tool_quantity, current_quantity: int = 1):
     # print("---------show_return_quantity_selection---------")
     # print("tool_name---------", tool_name)
     # print("tool_quantity---------", tool_quantity)
     # print("current_quantity---------\n", current_quantity)
 
-
-
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="➖", callback_data=f"decrease_return:{tool_name}:{tool_quantity}:{current_quantity}"),
+            InlineKeyboardButton(text="➖", callback_data=f"decrease_return:{tool_uuid}:{current_quantity}"),
             InlineKeyboardButton(text=f"{current_quantity}", callback_data="ignore"),
-            InlineKeyboardButton(text="➕", callback_data=f"increase_return:{tool_name}:{tool_quantity}:{current_quantity}")
+            InlineKeyboardButton(text="➕", callback_data=f"increase_return:{tool_uuid}:{current_quantity}")
         ],
-        [InlineKeyboardButton(text="Продолжить", callback_data=f"confirm_return:{tool_name}:{current_quantity}")],
+        [InlineKeyboardButton(text="Продолжить", callback_data=f"confirm_return:{tool_uuid}:{current_quantity}")],
         [InlineKeyboardButton(text="Назад", callback_data=f"back_to_tools2")],
 
     ])
     await message.edit_text(f"Выберите количество для возврата {tool_quantity}:", reply_markup=keyboard)
 
 
-
 # Обработчики для увеличения/уменьшения количества возвращаемого инструмента
 @router.callback_query(
     lambda c: c.data and (c.data.startswith('increase_return:') or c.data.startswith('decrease_return:')))
 async def change_return_quantity(callback_query: types.CallbackQuery):
-    _, tool_name, tool_quantity, current_quantity = callback_query.data.split(':')
+    print(callback_query.data.split(':'))
+    _, tool_uuid, current_quantity = callback_query.data.split(':')
 
-    tool_quantity = int(tool_quantity)
+    user_tool = await fetch_tool_by_uuid(tool_uuid)
+
+    tool_name = user_tool['Инструменты']
+    tool_quantity = int(user_tool['Количество'])
     current_quantity = int(current_quantity)
-    # print("---------change_return_quantity---------")
-    # print("tool_name---------", tool_name)
-    # print("tool_quantity---------", tool_quantity)
-    # print("current_quantity---------\n", current_quantity)
+
+    print("---------change_return_quantity---------")
+    print("tool_name---------", tool_name)
+    print("tool_quantity---------", tool_quantity)
+    print("current_quantity---------", current_quantity)
 
     # Логика изменения количества
     if 'increase_return' in callback_query.data and current_quantity < tool_quantity:
         current_quantity += 1
-        await show_return_quantity_selection(callback_query.message, tool_name, tool_quantity,current_quantity)
+        await show_return_quantity_selection(callback_query.message, tool_uuid, tool_quantity,current_quantity)
     elif 'decrease_return' in callback_query.data and current_quantity > 1:
         current_quantity -= 1
-        await show_return_quantity_selection(callback_query.message, tool_name, tool_quantity,current_quantity)
+        await show_return_quantity_selection(callback_query.message, tool_uuid, tool_quantity,current_quantity)
     else:
         if current_quantity < tool_quantity:
             await callback_query.answer(f"ОШИБКА: Вы не можете выбрать 0 инструментов",
@@ -503,70 +522,73 @@ async def change_return_quantity(callback_query: types.CallbackQuery):
 # Обработчик для подтверждения возврата
 @router.callback_query(F.data.startswith('confirm_return:'))
 async def confirm_tool_return(callback_query: types.CallbackQuery):
-    _, tool_name, quantity = callback_query.data.split(':')
+    _, tool_uuid, quantity = callback_query.data.split(':')
     quantity = int(quantity)
     chat_id = callback_query.message.chat.id
+    user_tool = await fetch_tool_by_uuid(tool_uuid)
 
-    # Подключение к базе данных
-    pool = await connect_to_db()
-    async with pool.acquire() as connection:
-        # Check if the tool exists in the database
-        tool = await connection.fetchrow(
-            "SELECT Инструменты, Осталось FROM tools WHERE Инструменты = $1", tool_name
-        )
-
-        if tool:
-            user_tool = await connection.fetchrow(
-                "SELECT uuid, Количество FROM user_tool WHERE chat_id = $1 AND Инструменты = $2",
-                chat_id, tool_name
+    if user_tool:
+        tool_name = user_tool['Инструменты']
+        # Подключение к базе данных
+        pool = await connect_to_db()
+        async with pool.acquire() as connection:
+            # Check if the tool exists in the database
+            tool = await connection.fetchrow(
+                "SELECT Инструменты, Осталось FROM tools WHERE Инструменты = $1", tool_name
             )
-            # print('tool',tool)
 
-            if user_tool:
-                user_tool_quantity = int(user_tool['Количество'])
-                remaining_quantity = int(tool['Осталось'])
-                # print('user_tool', user_tool)
-                # Update tool quantity in the main table
-                new_quantity = remaining_quantity + quantity
-                await connection.execute(
-                    "UPDATE tools SET Осталось = $1 WHERE Инструменты = $2",
-                    str(new_quantity), tool_name
+            if tool:
+                user_tool = await connection.fetchrow(
+                    "SELECT uuid, Количество FROM user_tool WHERE chat_id = $1 AND Инструменты = $2",
+                    chat_id, tool_name
                 )
+                # print('tool',tool)
 
-                if quantity >= user_tool_quantity:
-                    # Remove the tool from user records if all are returned
+                if user_tool:
+                    user_tool_quantity = int(user_tool['Количество'])
+                    remaining_quantity = int(tool['Осталось'])
+                    # print('user_tool', user_tool)
+                    # Update tool quantity in the main table
+                    new_quantity = remaining_quantity + quantity
                     await connection.execute(
-                        "DELETE FROM user_tool WHERE uuid = $1",
-                        user_tool['uuid']
-                    )
-                else:
-                    # Update the user's tool quantity if only part is returned
-                    new_user_quantity = user_tool_quantity - quantity
-                    await connection.execute(
-                        "UPDATE user_tool SET Количество = $1 WHERE uuid = $2",
-                        str(new_user_quantity), user_tool['uuid']
+                        "UPDATE tools SET Осталось = $1 WHERE Инструменты = $2",
+                        str(new_quantity), tool_name
                     )
 
-                # Confirm to the user
-                await callback_query.answer(f"Вы успешно вернули {quantity} {tool_name} на склад.")
-                # Проверяем, есть ли еще зарегистрированные инструменты у пользователя
-                tools = await fetch_user_tools(chat_id)
+                    if quantity >= user_tool_quantity:
+                        # Remove the tool from user records if all are returned
+                        await connection.execute(
+                            "DELETE FROM user_tool WHERE uuid = $1",
+                            user_tool['uuid']
+                        )
+                    else:
+                        # Update the user's tool quantity if only part is returned
+                        new_user_quantity = user_tool_quantity - quantity
+                        await connection.execute(
+                            "UPDATE user_tool SET Количество = $1 WHERE uuid = $2",
+                            str(new_user_quantity), user_tool['uuid']
+                        )
 
-                if tools:
-                    # Если у пользователя еще остались инструменты, отправляем обновленный список
-                    await send_user_tools(callback_query.message)
+                    # Confirm to the user
+                    await callback_query.answer(f"Вы успешно вернули {quantity} {tool_name} на склад.")
+                    # Проверяем, есть ли еще зарегистрированные инструменты у пользователя
+                    tools = await fetch_user_tools(chat_id)
+
+                    if tools:
+                        # Если у пользователя еще остались инструменты, отправляем обновленный список
+                        await send_user_tools(callback_query.message)
+                    else:
+                        # Если у пользователя не осталось инструментов, удаляем сообщение с выбором количества
+                        await callback_query.message.delete()
+                        # Отправляем сообщение о том, что у него больше нет инструментов
+                        reply = await callback_query.message.answer("Все инструменты были возвращены.\nВыберите раздел", reply_markup=main_menu)
+                        await handle_bot_message(callback_query.message, reply)
                 else:
-                    # Если у пользователя не осталось инструментов, удаляем сообщение с выбором количества
-                    await callback_query.message.delete()
-                    # Отправляем сообщение о том, что у него больше нет инструментов
-                    reply = await callback_query.message.answer("Все инструменты были возвращены.\nВыберите раздел", reply_markup=main_menu)
-                    await handle_bot_message(callback_query.message, reply)
+                    await callback_query.answer("Инструмент не найден для возврата.", show_alert=True)
             else:
-                await callback_query.answer("Инструмент не найден для возврата.", show_alert=True)
-        else:
-            await callback_query.answer("Инструмент не найден.", show_alert=True)
+                await callback_query.answer("Инструмент не найден.", show_alert=True)
 
-    await pool.close()
+        await pool.close()
 
 
 async def main():

@@ -36,6 +36,12 @@ async def handle_user_message(message: types.Message):
     print('user_messages', user_messages, '\n')
 
 
+async def fetch_tool_by_uuid(tool_uuid):
+    # Пример запроса к базе данных для получения данных инструмента по uuid
+    conn = await asyncpg.connect(**DB_CONFIG)
+    query = "SELECT * FROM user_tool WHERE uuid = $1"
+    return await conn.fetchrow(query, tool_uuid)
+
 # Функция для обработки сообщений бота
 async def handle_bot_message(message: types.Message, reply):
     chat_id = message.chat.id
