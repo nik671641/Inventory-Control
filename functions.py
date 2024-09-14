@@ -1,11 +1,8 @@
 import logging
 import asyncpg
 
-
 from bot import bot, types
 from config import DATABASE_URL, DB_CONFIG
-
-
 
 # Список для хранения сообщений пользователей
 user_messages = {}
@@ -35,12 +32,6 @@ async def handle_user_message(message: types.Message):
     print('text', message.text)
     print('user_messages', user_messages, '\n')
 
-
-async def fetch_tool_by_uuid(tool_uuid):
-    # Пример запроса к базе данных для получения данных инструмента по uuid
-    conn = await asyncpg.connect(**DB_CONFIG)
-    query = "SELECT * FROM user_tool WHERE uuid = $1"
-    return await conn.fetchrow(query, tool_uuid)
 
 # Функция для обработки сообщений бота
 async def handle_bot_message(message: types.Message, reply):
@@ -74,14 +65,21 @@ async def delete_old_messages(chat_id, messages):
 
 
 async def connect_to_db():
-    return await asyncpg.create_pool(DATABASE_URL, min_size=5, max_size=10)
+    return await asyncpg.create_pool(DATABASE_URL)
+
+
+async def fetch_tool_by_uuid(tool_uuid):
+    # Пример запроса к базе данных для получения данных инструмента по uuid
+    conn = await asyncpg.connect(**DB_CONFIG)
+    query = "SELECT * FROM user_tool WHERE uuid = $1"
+    return await conn.fetchrow(query, tool_uuid)
 
 
 # Функция для подключения к базе данных и получения списка инструментов
 async def fetch_tools(start: int, end: int):
     conn = await asyncpg.connect(**DB_CONFIG)
     try:
-        rows = await conn.fetch("SELECT id, Инструменты, Осталось FROM tools WHERE id BETWEEN $1 AND $2 ORDER BY id;",
+        rows = await conn.fetch("SELECT id, Инструменты, instrumente, Осталось FROM tools WHERE id BETWEEN $1 AND $2 ORDER BY id;",
                                 start, end)
         return rows
     finally:
@@ -101,23 +99,12 @@ async def tools_quantity():
         await conn.close()
 
 
-async def fetch_tools_quantity():
+async def fetch_tools_quantity(tool_id):
     # Подключение к базе данных
-    pool = await connect_to_db()
-
-    async with pool.acquire() as connection:
-        # Выполняем SQL-запрос для получения данных из таблицы tools
-        query = "SELECT id, Инструменты, Осталось FROM tools WHERE id BETWEEN 1 AND 182 ORDER BY id;"
-        rows = await connection.fetch(query)
-
-        # Обрабатываем результаты запроса и формируем список
-        tools = [{"tool_id": row["id"], "tool_name": row["Инструменты"], "quantity": row["Осталось"]} for row in rows]
-
-    # Освобождаем ресурсы
-    await pool.close()
-
+    conn = await asyncpg.connect(**DB_CONFIG)
+    query = "SELECT id, Инструменты, instrumente, Осталось FROM tools WHERE id = $1;"
     # Возвращаем список инструментов с их количеством
-    return tools
+    return await conn.fetchrow(query, tool_id)
 
 
 # Функция для показа выбора количества
@@ -128,7 +115,7 @@ async def fetch_user_tools(user_id):
     conn = await asyncpg.connect(**DB_CONFIG)
     try:
         query = """
-        SELECT uuid, Инструменты, Количество, chat_id
+        SELECT uuid, Инструменты, Количество, chat_id, instrumente
         FROM user_tool 
         WHERE chat_id = $1;
         """
