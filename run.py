@@ -1,10 +1,5 @@
 import asyncio
-
-from bot import dp, bot
-
-
-async def main():
-    await dp.start_polling(bot)
+from bot import main
 
 
 if __name__ == "__main__":
